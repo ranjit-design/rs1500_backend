@@ -1,0 +1,87 @@
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+*.sqlite3
+*.db
+*.env
+.env
+venv/
+env/
+.venv/
+.env.*
+media/
+staticfiles/
+*.log
+.DS_Store
+.idea/
+.vscode/
+coverage/
+htmlcov/
+*.cover
+*.py,cover
+instance/
+.webassets-cache
+.pytest_cache/
+celerybeat-schedule
+*.pem
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# PyCharm
+.idea/
+
+# VSCode
+.vscode/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Node
+node_modules/
+
+# Tests
+.pytest_cache/
+
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
