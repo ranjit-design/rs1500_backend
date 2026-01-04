@@ -1,0 +1,399 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<style>
+  .hotel-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  @media (max-width: 768px) {
+    .hotel-page {
+      padding: 0 12px;
+    }
+  }
+  .hotel-page-header {
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #eaeef2;
+  }
+  .hotel-page-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1a1f36;
+    margin: 0 0 8px 0;
+    line-height: 1.3;
+  }
+  .hotel-page-header p {
+    color: #697386;
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+  .hotel-card {
+    border: 1px solid #e1e8ed;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 32px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    transition: box-shadow 0.2s ease, transform 0.1s ease;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  @media (max-width: 768px) {
+    .hotel-card {
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+  }
+  .hotel-card:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  }
+  .reservation-table-container {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+  table.reservation-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    min-width: 1100px;
+    table-layout: fixed;
+  }
+  table.reservation-table th,
+  table.reservation-table td {
+    padding: 14px 12px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  table.reservation-table th {
+    background: #f8fafc;
+    color: #4a5568;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  /* Set specific column widths */
+  table.reservation-table th:nth-child(1) { width: 140px; } /* Created */
+  table.reservation-table th:nth-child(2) { width: 220px; } /* Guest */
+  table.reservation-table th:nth-child(3) { width: 240px; } /* Room / Dates */
+  table.reservation-table th:nth-child(4) { width: 160px; } /* Guests & Rooms */
+  table.reservation-table th:nth-child(5) { width: 120px; } /* Total */
+  table.reservation-table th:nth-child(6) { 
+    width: 120px;
+    padding-left: 20px;  /* Add space between Total and Status */
+  } /* Status */
+  table.reservation-table th:nth-child(7) { 
+    width: 120px;  /* Reduced width since buttons are stacked */
+  } /* Actions */
+  
+  /* Responsive adjustments */
+  @media (max-width: 1024px) {
+    .hotel-page {
+      padding: 0 16px;
+    }
+    table.reservation-table {
+      font-size: 0.85rem;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .reservation-table-container {
+      margin: 0 -12px;
+      padding: 0 12px;
+    }
+    table.reservation-table th,
+    table.reservation-table td {
+      padding: 12px 10px;
+    }
+    .btn-status {
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      min-width: 70px;
+    }
+  }
+  table.reservation-table td {
+    color: #2d3748;
+    transition: background 0.15s ease;
+    word-wrap: break-word;
+  }
+  table.reservation-table tbody tr:hover td {
+    background-color: #f8fafc;
+  }
+  .badge-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    line-height: 1.3;
+    min-width: 80px;
+    justify-content: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+  .badge-pending {
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fcd34d;
+  }
+  .badge-confirmed {
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #86efac;
+  }
+  .badge-cancelled {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+  }
+  .status-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 160px;
+  }
+  .btn-status {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 80px;
+  }
+  .btn-status:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.3);
+  }
+  .btn-status-confirm {
+    background: #10b981;
+    color: #fff;
+  }
+  .btn-status-confirm:hover {
+    background: #059669;
+    transform: translateY(-1px);
+  }
+  .btn-status-confirm:active {
+    transform: translateY(0);
+  }
+  .btn-status-reject {
+    background: #ef4444;
+    color: #fff;
+  }
+  .btn-status-reject:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+  }
+  .btn-status-reject:active {
+    transform: translateY(0);
+  }
+  .text-muted-small {
+    font-size: 0.8rem;
+    color: #6b7280;
+    line-height: 1.5;
+    display: block;
+    margin-top: 2px;
+  }
+  .no-reservations {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6b7280;
+    font-size: 1rem;
+    background: #f9fafb;
+    border-radius: 8px;
+    margin: 20px 0;
+  }
+  .reservation-guest {
+    font-weight: 600;
+    color: #1a1f36;
+    margin-bottom: 4px;
+  }
+  .reservation-dates {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    color: #4a5568;
+    font-size: 0.88rem;
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+  .reservation-room {
+    font-weight: 500;
+    color: #2d3748;
+    margin-bottom: 4px;
+  }
+  .reservation-guests {
+    color: #4a5568;
+    font-size: 0.85rem;
+  }
+  .reservation-amount {
+    font-weight: 600;
+    color: #1a1f36;
+    font-size: 0.95rem;
+  }
+  .reservation-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 100px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main" class="hotel-page">
+  <div class="hotel-page-header">
+    <h1>Reservations &amp; Booking Status</h1>
+    {% if hotel %}
+      <p>All reservations submitted by guests for <strong>{{ hotel.name }}</strong>.</p>
+    {% else %}
+      <p class="text-muted-small">No hotel is attached to this account.</p>
+    {% endif %}
+  </div>
+
+  <div class="hotel-card">
+    {% if reservations %}
+      <div class="reservation-table-container">
+        <table class="reservation-table">
+        <thead>
+          <tr>
+            <th style="width: 140px;">Created</th>
+            <th style="width: 220px;">Guest</th>
+            <th style="width: 240px;">Room / Dates</th>
+            <th style="width: 160px;">Guests &amp; Rooms</th>
+            <th style="width: 120px; text-align: right; padding-right: 20px;">Total</th>
+            <th style="width: 120px; padding-left: 20px;">Status</th>
+            <th style="width: 120px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in reservations %}
+            <tr>
+              <td>
+                <div class="text-muted-small" style="white-space: nowrap;">{{ r.created_at|date:"M j, Y" }}</div>
+                <div class="text-muted-small" style="font-size: 0.75rem; color: #9ca3af;">#{{ r.id }}</div>
+              </td>
+              <td>
+                <div class="reservation-guest">{{ r.guest_name }}</div>
+                <div class="text-muted-small">{{ r.guest_email }}</div>
+                {% if r.guest_phone %}
+                <div class="text-muted-small" style="margin-top: 4px; display: flex; align-items: center;">
+                  <i class="fas fa-phone-alt" style="margin-right: 6px; font-size: 0.8em;"></i>
+                  <span>{{ r.guest_phone }}</span>
+                </div>
+                {% endif %}
+              </td>
+              <td>
+                <div class="reservation-dates">
+                  <span>{{ r.check_in|date:"M j, Y" }}</span>
+                  <span>→</span>
+                  <span>{{ r.check_out|date:"M j, Y" }}</span>
+                </div>
+                {% if r.room_type %}
+                  <div class="reservation-room">{{ r.room_type.name }}</div>
+                {% else %}
+                  <div class="text-muted-small">(Room type removed)</div>
+                {% endif %}
+              </td>
+              <td>
+                <div class="reservation-guests">
+                  <div>👤 {{ r.adults }} Adult{% if r.adults != 1 %}s{% endif %}</div>
+                  {% if r.children %}
+                    <div>👶 {{ r.children }} Child{% if r.children != 1 %}ren{% endif %}</div>
+                  {% endif %}
+                  <div>🏠 {{ r.rooms_count }} Room{% if r.rooms_count != 1 %}s{% endif %}</div>
+                </div>
+              </td>
+              <td style="text-align: right; padding-right: 20px;">
+                <div class="reservation-amount">{{ r.currency }} {{ r.total_price|floatformat:2 }}</div>
+              </td>
+              <td>
+                {% if r.status == "pending" %}
+                  <span class="badge-status badge-pending">Pending</span>
+                {% elif r.status == "confirmed" %}
+                  <span class="badge-status badge-confirmed">Confirmed</span>
+                {% elif r.status == "cancelled" %}
+                  <span class="badge-status badge-cancelled">Rejected</span>
+                {% else %}
+                  <span class="badge-status">{{ r.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td style="padding-left: 20px;">
+                <div class="reservation-actions">
+                  {% if r.status == "pending" %}
+                    <form method="post" style="display:block; margin-bottom: 8px;">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="update_status" />
+                      <input type="hidden" name="reservation_id" value="{{ r.id }}" />
+                      <input type="hidden" name="status" value="confirmed" />
+                      <button type="submit" class="btn-status btn-status-confirm" style="width: 100%;">
+                        <span>✓ Confirm</span>
+                      </button>
+                    </form>
+                    <form method="post" style="display:block;">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="update_status" />
+                      <input type="hidden" name="reservation_id" value="{{ r.id }}" />
+                      <input type="hidden" name="status" value="cancelled" />
+                      <button type="submit" class="btn-status btn-status-reject" style="width: 100%;">
+                        <span>✕ Reject</span>
+                      </button>
+                    </form>
+                  {% elif r.status == "confirmed" %}
+                    <form method="post" style="display:inline;">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="update_status" />
+                      <input type="hidden" name="reservation_id" value="{{ r.id }}" />
+                      <input type="hidden" name="status" value="cancelled" />
+                      <button type="submit" class="btn-status btn-status-reject">
+                        <span>✕ Cancel</span>
+                      </button>
+                    </form>
+                  {% else %}
+                    <form method="post" style="display:inline;">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="update_status" />
+                      <input type="hidden" name="reservation_id" value="{{ r.id }}" />
+                      <input type="hidden" name="status" value="confirmed" />
+                      <button type="submit" class="btn-status btn-status-confirm">
+                        <span>✓ Confirm</span>
+                      </button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="no-reservations">
+        <p>No reservations have been submitted for your hotel yet.</p>
+        <p class="text-muted-small" style="margin-top: 8px;">New reservations will appear here automatically.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

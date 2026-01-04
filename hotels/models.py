@@ -16,17 +16,44 @@ class Amenity(models.Model):
 
 
 class Hotel(models.Model):
+    PLACE_TYPE_HOTEL = "hotel"
+    PLACE_TYPE_RESORT = "resort"
+    PLACE_TYPE_LODGE = "lodge"
+    PLACE_TYPE_APARTMENT = "apartment"
+    PLACE_TYPE_GUEST_HOUSE = "guest_house"
+    PLACE_TYPE_HOME_STAY = "home_stay"
+    PLACE_TYPE_CAMPSITE = "campsite"
+    PLACE_TYPE_VILLA = "villa"
+
+    PLACE_TYPE_CHOICES = [
+        (PLACE_TYPE_HOTEL, "Hotel"),
+        (PLACE_TYPE_RESORT, "Resort"),
+        (PLACE_TYPE_LODGE, "Lodge"),
+        (PLACE_TYPE_APARTMENT, "Apartment"),
+        (PLACE_TYPE_GUEST_HOUSE, "Guest House"),
+        (PLACE_TYPE_HOME_STAY, "Home Stay"),
+        (PLACE_TYPE_CAMPSITE, "Campsite"),
+        (PLACE_TYPE_VILLA, "Villa"),
+    ]
+
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
 
     country = models.CharField(max_length=80, blank=True)
     city = models.CharField(max_length=80, db_index=True)
     address = models.CharField(max_length=255, blank=True)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
+    google_maps_url = models.URLField(max_length=500, blank=True)
+
+    place_type = models.CharField(
+        max_length=20,
+        choices=PLACE_TYPE_CHOICES,
+        default=PLACE_TYPE_HOTEL,
+    )
 
     rating = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    approval_requested = models.BooleanField(default=False)
 
     amenities = models.ManyToManyField(Amenity, blank=True, related_name="hotels")
 
@@ -246,3 +273,15 @@ class Reservation(models.Model):
     
     def __str__(self):
         return f"{self.guest_name} - {self.hotel.name} - {self.check_in} to {self.check_out}"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        CONFIRMED = "confirmed", "Confirmed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        help_text="Reservation status: pending, confirmed, or cancelled.",
+    )

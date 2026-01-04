@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Approve Hotel Partners</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #f6f7fb;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        .container {
+            max-width: 960px;
+            margin: 40px auto;
+            padding: 24px;
+        }
+        .card {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            font-size: 16px;
+            color: #64748b;
+            margin-bottom: 24px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 14px;
+        }
+        th {
+            font-weight: 700;
+            color: #374151;
+            background: #f9fafb;
+        }
+        td {
+            color: #334155;
+        }
+        .actions {
+            margin-top: 16px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 14px;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-approve {
+            background: #16a34a;
+            color: #ffffff;
+        }
+        .btn-reject {
+            background: #dc2626;
+            color: #ffffff;
+        }
+        .empty {
+            text-align: center;
+            padding: 48px;
+            color: #64748b;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="card">
+        <h1>Approve Hotel Partners</h1>
+        <p class="subtitle">Review pending hotel registrations and approve or reject them.</p>
+
+        {% if pending_hotels %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Hotel</th>
+                    <th>Country</th>
+                    <th>City</th>
+                    <th>Owner Email</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for hotel in pending_hotels %}
+                <tr>
+                    <td>{{ hotel.name }}</td>
+                    <td>{{ hotel.country }}</td>
+                    <td>{{ hotel.city }}</td>
+                    <td>{{ hotel.owner_email }}</td>
+                    <td>
+                        <div class="actions">
+                            <a class="btn btn-approve" href="{{ hotel.approve_url }}">Approve</a>
+                            <a class="btn btn-reject" href="{{ hotel.reject_url }}">Reject</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty">
+            No pending hotel registrations at the moment.
+        </div>
+        {% endif %}
+    </div>
+</div>
+</body>
+</html>

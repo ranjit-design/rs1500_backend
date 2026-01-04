@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 import os
 from pathlib import Path
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,15 +21,29 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-muy8)xlr4&hoeiur$t@##&=6y=)g32a4&o!@))zsl6bx-&=15j'
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-muy8)xlr4&hoeiur$t@##&=6y=)g32a4&o!@))zsl6bx-&=15j",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() in {"1", "true", "yes", "on"}
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "::1"]
+_allowed_hosts_env = os.environ.get("DJANGO_ALLOWED_HOSTS", "")
+if _allowed_hosts_env.strip():
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(",") if h.strip()]
+else:
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1", "::1"]
+
+_render_external_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+if _render_external_hostname and _render_external_hostname not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_render_external_hostname)
 
 # Google OAuth
-GOOGLE_CLIENT_ID = "840634935512-j91s127uuh20ihcg1l53td939loi7dou.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = os.environ.get(
+    "GOOGLE_CLIENT_ID",
+    "840634935512-viibfb3l10k4s71bjgapm344q3fnjqig.apps.googleusercontent.com",
+)
 
 
 # Application definition
@@ -50,6 +65,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -87,16 +103,33 @@ WSGI_APPLICATION = 'rs1500_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "rs1500",
-        "USER": "rs1500user",
-        "PASSWORD": "hotel",
-        "HOST": "127.0.0.1",
-        "PORT": "5432",
+_database_url = os.environ.get("DATABASE_URL")
+if _database_url:
+    _db_is_postgres = _database_url.startswith(("postgres://", "postgresql://"))
+    _ssl_require_env = os.environ.get("DATABASE_SSL_REQUIRE")
+    if _ssl_require_env is not None:
+        _db_ssl_require = _ssl_require_env.lower() in {"1", "true", "yes", "on"}
+    else:
+        _is_render = bool(os.environ.get("RENDER_EXTERNAL_HOSTNAME"))
+        _db_ssl_require = bool(_db_is_postgres and _is_render)
+    DATABASES = {
+        "default": dj_database_url.parse(
+            _database_url,
+            conn_max_age=600,
+            ssl_require=_db_ssl_require,
+        )
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "rs1500",
+            "USER": "rs1500user",
+            "PASSWORD": "hotel",
+            "HOST": "127.0.0.1",
+            "PORT": "5432",
+        }
+    }
 
 
 # Password validation
@@ -133,16 +166,29 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
-CORS_ALLOW_ALL_ORIGINS = True
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "hotel_media"
+
+CORS_ALLOW_ALL_ORIGINS = os.environ.get("CORS_ALLOW_ALL_ORIGINS", "True").lower() in {"1", "true", "yes", "on"}
+
+_csrf_trusted_origins_env = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "")
+if _csrf_trusted_origins_env.strip():
+    CSRF_TRUSTED_ORIGINS = [
+        o.strip() for o in _csrf_trusted_origins_env.split(",") if o.strip()
+    ]
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "ranjitchaudhary057@gmail.com"
-EMAIL_HOST_PASSWORD = "zqsw loii ojej puqo"
-DEFAULT_FROM_EMAIL = "no-reply@yourapp.com"
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() in {"1", "true", "yes", "on"}
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "ranjitchaudhary057@gmail.com")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "zqsw loii ojej puqo")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@yourapp.com")
 
-
-GOOGLE_CLIENT_ID = "840634935512-5ksp41kr2pkgl515v3lrdlvqbjvnqfcp.apps.googleusercontent.com"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

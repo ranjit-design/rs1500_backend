@@ -1,0 +1,132 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .hotel-page {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .hotel-page-header {
+    margin-bottom: 24px;
+  }
+  .hotel-page-header h1 {
+    font-size: 28px;
+    margin-bottom: 4px;
+  }
+  .hotel-page-header p {
+    color: #555;
+    margin: 0;
+  }
+  .hotel-card {
+    border: 1px solid #e3e3e3;
+    border-radius: 16px;
+    padding: 20px 22px 22px;
+    margin-bottom: 24px;
+    background: #fff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+  }
+  .hotel-card-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  .policy-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px 18px;
+    margin-bottom: 14px;
+  }
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .form-field label {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .form-field input[type="text"],
+  .form-field input[type="time"],
+  .form-field textarea {
+    border-radius: 8px;
+    border: 1px solid #d4d4d4;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+  .form-field textarea {
+    min-height: 90px;
+    resize: vertical;
+  }
+  .btn-primary {
+    display: inline-block;
+    margin-top: 14px;
+    padding: 8px 18px;
+    border-radius: 999px;
+    border: none;
+    background: #16a34a;
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .btn-primary:hover {
+    background: #15803d;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main" class="hotel-page">
+  <div class="hotel-page-header">
+    <h1>Manage Hotel Policies</h1>
+    <p>Set check-in / check-out times and all important policies. Guests will see these details before booking.</p>
+  </div>
+
+  <div class="hotel-card">
+    <div class="hotel-card-title">Check-in / Check-out</div>
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="policy-grid-2">
+        <div class="form-field">
+          <label>Check-in Time</label>
+          {{ form.check_in_time }}
+        </div>
+        <div class="form-field">
+          <label>Check-out Time</label>
+          {{ form.check_out_time }}
+        </div>
+      </div>
+
+      <div class="form-field" style="margin-top: 6px;">
+        <label>Cancellation Policy</label>
+        {{ form.cancellation_policy }}
+      </div>
+
+      <div class="form-field" style="margin-top: 10px;">
+        <label>Payment Policy</label>
+        {{ form.payment_policy }}
+      </div>
+
+      <div class="form-field" style="margin-top: 10px;">
+        <label>Children Policy</label>
+        {{ form.child_policy }}
+      </div>
+
+      <div class="form-field" style="margin-top: 10px;">
+        <label>Pet Policy</label>
+        {{ form.pet_policy }}
+      </div>
+
+      <div class="form-field" style="margin-top: 10px;">
+        <label>Additional Info</label>
+        {{ form.additional_info }}
+      </div>
+
+      <button type="submit" class="btn-primary">Save Policies</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

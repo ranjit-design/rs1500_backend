@@ -1,0 +1,115 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .hotel-page {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .hotel-page-header {
+    margin-bottom: 24px;
+  }
+  .hotel-page-header h1 {
+    font-size: 28px;
+    margin-bottom: 4px;
+  }
+  .hotel-page-header p {
+    color: #555;
+    margin: 0;
+  }
+  .hotel-card {
+    border: 1px solid #e3e3e3;
+    border-radius: 16px;
+    padding: 20px 22px 22px;
+    margin-bottom: 24px;
+    background: #fff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px 18px;
+  }
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .form-field label {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .form-field input[type="text"],
+  .form-field textarea {
+    border-radius: 8px;
+    border: 1px solid #d4d4d4;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+  .form-field textarea {
+    min-height: 110px;
+    resize: vertical;
+  }
+  .btn-primary {
+    display: inline-block;
+    margin-top: 14px;
+    padding: 8px 18px;
+    border-radius: 999px;
+    border: none;
+    background: #16a34a;
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .btn-primary:hover {
+    background: #15803d;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main" class="hotel-page">
+  <div class="hotel-page-header">
+    <h1>Hotel Details</h1>
+    <p>Update your basic hotel information.</p>
+  </div>
+
+  <div class="hotel-card">
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="form-grid">
+        <div class="form-field">
+          <label>Name</label>
+          {{ form.name }}
+        </div>
+        <div class="form-field">
+          <label>Place Type</label>
+          {{ form.place_type }}
+        </div>
+        <div class="form-field">
+          <label>Country</label>
+          {{ form.country }}
+        </div>
+        <div class="form-field">
+          <label>City</label>
+          {{ form.city }}
+        </div>
+        <div class="form-field">
+          <label>Address</label>
+          {{ form.address }}
+        </div>
+        <div class="form-field">
+          <label>Google Maps URL</label>
+          {{ form.google_maps_url }}
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary">Save Details</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

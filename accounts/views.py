@@ -1,10 +1,16 @@
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth.models import User
 from rest_framework.views import APIView
 from django.core.mail import send_mail
 from .models import EmailOTP
 from rest_framework.permissions import AllowAny
-from .serializers import UserSerializer, RequestOTPSerializer, VerifyOTPSerializer
+from .serializers import (
+    UserSerializer,
+    RequestOTPSerializer,
+    VerifyOTPSerializer,
+    EmailOrUsernameTokenObtainPairSerializer,
+)
 from rest_framework.response import Response
 from .utils import create_otp_record, hash_otp
 from django.conf import settings
@@ -65,6 +71,17 @@ class GoogleLoginView(APIView):
             },
             status=200,
         )
+
+
+class EmailOrUsernameTokenObtainPairView(TokenObtainPairView):
+    """JWT login view that accepts either username or email.
+
+    The frontend should POST {"username": "<email or username>", "password": "..."}
+    to /api/auth/token/. This view uses EmailOrUsernameTokenObtainPairSerializer
+    to resolve an email into the correct Django username before issuing tokens.
+    """
+
+    serializer_class = EmailOrUsernameTokenObtainPairSerializer
 
 
 
