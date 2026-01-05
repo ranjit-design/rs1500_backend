@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AmenityViewSet,
     BookingViewSet,
+    AdminHotelApprovalPage,
     HotelFacilityMappingViewSet,
     HotelFacilityViewSet,
     HotelImageViewSet,
@@ -21,7 +22,6 @@ from .views import (
     hotel_partner_approve_view,
     hotel_partner_reject_view,
     HotelPartnerApprovalListView,
-    hotel_partner_admin_approval_page,
 )
 
 router = DefaultRouter()
@@ -68,7 +68,7 @@ urlpatterns = router.urls + [
     ),
     path(
         "admin/approve-hotels/",
-        hotel_partner_admin_approval_page,
+        AdminHotelApprovalPage.as_view(),
         name="hotel-admin-approve-page",
     ),
 ]

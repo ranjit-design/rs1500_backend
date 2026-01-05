@@ -10,11 +10,21 @@ from django.urls import reverse
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 from django.shortcuts import render
 from rest_framework import viewsets
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import (
+    AllowAny,
+    BasePermission,
+    IsAdminUser,
+    IsAuthenticated,
+    IsAuthenticatedOrReadOnly,
+)
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.renderers import TemplateHTMLRenderer, JSONRenderer
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import EmailOTP, HotelAccount
@@ -185,11 +195,28 @@ def _send_hotel_approval_email(request, hotel):
         pass
 
 
-class IsAdminOrReadOnly(IsAuthenticatedOrReadOnly):
+class IsHotelPartner(BasePermission):
     def has_permission(self, request, view):
-        if request.method in {"GET", "HEAD", "OPTIONS"}:
+        user = getattr(request, "user", None)
+        return bool(user and getattr(user, "is_authenticated", False) and hasattr(user, "hotel_account"))
+
+
+class IsAdminOrHotelPartner(BasePermission):
+    def has_permission(self, request, view):
+        user = getattr(request, "user", None)
+        return bool(
+            user
+            and getattr(user, "is_authenticated", False)
+            and (getattr(user, "is_staff", False) or hasattr(user, "hotel_account"))
+        )
+
+
+class IsAdminOrReadOnly(BasePermission):
+    def has_permission(self, request, view):
+        if getattr(request, "method", "").upper() in {"GET", "HEAD", "OPTIONS"}:
             return True
-        return bool(getattr(request, "user", None) and request.user.is_staff)
+        user = getattr(request, "user", None)
+        return bool(user and getattr(user, "is_authenticated", False) and getattr(user, "is_staff", False))
 
 
 class HotelViewSet(viewsets.ModelViewSet):
@@ -199,8 +226,86 @@ class HotelViewSet(viewsets.ModelViewSet):
         if self.action in {"list", "retrieve"}:
             return [AllowAny()]
         if self.action == "create":
-            return [IsAdminUser()]
+            return [IsAuthenticated()]
         return [IsAuthenticated()]
+
+    def create(self, request, *args, **kwargs):
+        user = getattr(request, "user", None)
+        if user and user.is_staff:
+            return super().create(request, *args, **kwargs)
+
+        hotel_id = get_user_hotel_id(user)
+        if not hotel_id:
+            if getattr(user, "hotel_account", None):
+                raise ValidationError({"detail": "This account already has a hotel."})
+
+            write_serializer = HotelWriteSerializer(
+                data=request.data,
+                context={"request": request},
+            )
+            write_serializer.is_valid(raise_exception=True)
+
+            wants_request_approval = bool(write_serializer.validated_data.get("is_active"))
+            with transaction.atomic():
+                hotel = write_serializer.save(is_active=False)
+                HotelAccount.objects.create(user=user, hotel=hotel)
+
+                if wants_request_approval:
+                    missing = _get_hotel_missing_sections(hotel)
+                    if missing:
+                        raise ValidationError(
+                            {
+                                "detail": "Complete all sections before requesting approval.",
+                                "missing": missing,
+                            }
+                        )
+                    if not hotel.approval_requested:
+                        hotel.approval_requested = True
+                        hotel.save(update_fields=["approval_requested"])
+                        _send_hotel_approval_email(request, hotel)
+
+            read_serializer = HotelDetailSerializer(hotel, context={"request": request})
+            return Response(read_serializer.data, status=201)
+
+        try:
+            hotel = Hotel.objects.get(id=hotel_id)
+        except Hotel.DoesNotExist:
+            raise PermissionDenied("Linked hotel not found")
+
+        write_serializer = HotelWriteSerializer(
+            hotel,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        write_serializer.is_valid(raise_exception=True)
+
+        wants_request_approval = bool(write_serializer.validated_data.get("is_active"))
+        with transaction.atomic():
+            write_serializer.save(is_active=hotel.is_active)
+
+            if wants_request_approval:
+                if hotel.is_active:
+                    raise ValidationError(
+                        {
+                            "detail": "This hotel is already active (approved). No approval request is needed.",
+                        }
+                    )
+                missing = _get_hotel_missing_sections(hotel)
+                if missing:
+                    raise ValidationError(
+                        {
+                            "detail": "Complete all sections before requesting approval.",
+                            "missing": missing,
+                        }
+                    )
+                if not hotel.approval_requested:
+                    hotel.approval_requested = True
+                    hotel.save(update_fields=["approval_requested"])
+                    _send_hotel_approval_email(request, hotel)
+
+        read_serializer = HotelDetailSerializer(hotel, context={"request": request})
+        return Response(read_serializer.data, status=200)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -219,7 +324,12 @@ class HotelViewSet(viewsets.ModelViewSet):
             )
 
         user_hotel_id = get_user_hotel_id(user)
-        if user_hotel_id and self.action in {"retrieve", "update", "partial_update", "destroy"}:
+        if self.action in {"update", "partial_update", "destroy"}:
+            if not user_hotel_id:
+                return qs.none()
+            qs = qs.filter(id=user_hotel_id)
+            room_types_qs = RoomType.objects.all().order_by("id").prefetch_related("room_images")
+        elif user_hotel_id and self.action == "retrieve":
             qs = qs.filter(Q(is_active=True) | Q(id=user_hotel_id))
             room_types_qs = RoomType.objects.all().order_by("id").prefetch_related("room_images")
         else:
@@ -427,6 +537,23 @@ class RoomTypeViewSet(viewsets.ModelViewSet):
             return RoomTypeWithImagesSerializer
         return RoomTypeSerializer
 
+    def create(self, request, *args, **kwargs):
+        user = getattr(request, "user", None)
+        if user and user.is_staff:
+            return super().create(request, *args, **kwargs)
+
+        hotel_id = get_user_hotel_id(user)
+        if not hotel_id:
+            raise PermissionDenied("You do not have permission to create room types")
+
+        data = request.data.copy()
+        data.setdefault("hotel", hotel_id)
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=201, headers=headers)
+
     def perform_create(self, serializer):
         user = getattr(self.request, "user", None)
         if user and user.is_staff:
@@ -500,6 +627,23 @@ class HotelImageViewSet(viewsets.ModelViewSet):
         if self.action in {"create", "update", "partial_update"}:
             return HotelImageWriteSerializer
         return HotelImageSerializer
+
+    def create(self, request, *args, **kwargs):
+        user = getattr(request, "user", None)
+        if user and user.is_staff:
+            return super().create(request, *args, **kwargs)
+
+        hotel_id = get_user_hotel_id(user)
+        if not hotel_id:
+            raise PermissionDenied("You do not have permission to create hotel images")
+
+        data = request.data.copy()
+        data.setdefault("hotel", hotel_id)
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=201, headers=headers)
 
     def perform_create(self, serializer):
         user = getattr(self.request, "user", None)
@@ -744,6 +888,32 @@ class HotelPolicyViewSet(viewsets.ModelViewSet):
     serializer_class = HotelPolicySerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
+    def create(self, request, *args, **kwargs):
+        user = getattr(request, "user", None)
+        if user and user.is_staff:
+            return super().create(request, *args, **kwargs)
+
+        hotel_id = get_user_hotel_id(user)
+        if not hotel_id:
+            raise PermissionDenied("You do not have permission to create hotel policies")
+
+        try:
+            existing = HotelPolicy.objects.get(hotel_id=hotel_id)
+        except HotelPolicy.DoesNotExist:
+            existing = None
+
+        data = request.data.copy()
+        data.setdefault("hotel", hotel_id)
+
+        serializer = self.get_serializer(
+            instance=existing,
+            data=data,
+            partial=bool(existing),
+        )
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer) if existing is None else self.perform_update(serializer)
+        return Response(serializer.data, status=200 if existing else 201)
+
     def get_queryset(self):
         qs = super().get_queryset()
         hotel_id = self.request.query_params.get("hotel")
@@ -778,6 +948,7 @@ class HotelPolicyViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         obj = self.get_object()
         user = getattr(self.request, "user", None)
+
         if user and user.is_staff:
             serializer.save()
             return
@@ -844,6 +1015,23 @@ class HotelFacilityMappingViewSet(viewsets.ModelViewSet):
             return qs.filter(hotel_id=user_hotel_id)
 
         return qs.filter(hotel__is_active=True)
+
+    def create(self, request, *args, **kwargs):
+        user = getattr(request, "user", None)
+        if user and user.is_staff:
+            return super().create(request, *args, **kwargs)
+
+        hotel_id = get_user_hotel_id(user)
+        if not hotel_id:
+            raise PermissionDenied("You do not have permission to create facility mappings")
+
+        data = request.data.copy()
+        data.setdefault("hotel", hotel_id)
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=201, headers=headers)
 
     def perform_create(self, serializer):
         user = getattr(self.request, "user", None)
@@ -1128,38 +1316,8 @@ def hotel_partner_approve_view(request, token):
     )
 
 
-class HotelPartnerApprovalListView(viewsets.ViewSet):
-    """List pending hotel partner registrations for the platform owner and allow inline approval."""
-    permission_classes = [IsAdminUser]
-
-    def list(self, request):
-        qs = (
-            Hotel.objects.select_related("account__user")
-            .filter(is_active=False, approval_requested=True)
-            .order_by("-created_at")
-        )
-        serializer = HotelApprovalSerializer(qs, many=True)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=["post"])
-    def approve(self, request, pk=None):
-        """Approve a single pending hotel by ID (platform owner only)."""
-        try:
-            hotel = Hotel.objects.get(pk=pk, is_active=False, approval_requested=True)
-        except Hotel.DoesNotExist:
-            return Response({"detail": "Pending hotel not found."}, status=404)
-
-        hotel.is_active = True
-        hotel.save(update_fields=["is_active"])
-        return Response({"detail": "Hotel approved and is now visible."}, status=200)
-
-
 def hotel_partner_reject_view(request, token):
-    """Reject a hotel partner registration via a signed one-click link.
-
-    The link is sent to the platform owner by email and contains a signed token
-    for the hotel ID.
-    """
+    """Reject a hotel approval request via a signed one-click link."""
 
     if not (getattr(request.user, "is_authenticated", False) and request.user.is_staff):
         return HttpResponse("Access denied: admin only.", status=403)
@@ -1167,9 +1325,9 @@ def hotel_partner_reject_view(request, token):
     try:
         hotel_id = hotel_approval_signer.unsign(token, max_age=7 * 24 * 60 * 60)
     except SignatureExpired:
-        return HttpResponse("Reject link has expired.", status=400)
+        return HttpResponse("Rejection link has expired.", status=400)
     except BadSignature:
-        return HttpResponse("Invalid reject link.", status=400)
+        return HttpResponse("Invalid rejection link.", status=400)
 
     try:
         hotel = Hotel.objects.get(pk=hotel_id)
@@ -1182,18 +1340,112 @@ def hotel_partner_reject_view(request, token):
             status=400,
         )
 
-    if not hotel.is_active:
-        hotel.delete()
+    if hotel.is_active:
         return HttpResponse(
-            "Hotel registration has been rejected and removed from the platform.", status=200
+            "Hotel is already approved and visible on the platform.", status=200
         )
 
-    hotel.is_active = False
-    hotel.save(update_fields=["is_active"])
+    hotel.approval_requested = False
+    hotel.save(update_fields=["approval_requested"])
 
     return HttpResponse(
-        "Hotel has been rejected and removed from the public listing.", status=200
+        "Hotel approval request has been rejected.",
+        status=200,
     )
+
+
+class HotelPartnerApprovalListView(viewsets.ReadOnlyModelViewSet):
+    queryset = Hotel.objects.select_related("account__user").all().order_by("-created_at")
+    serializer_class = HotelApprovalSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return qs.filter(is_active=False, approval_requested=True)
+
+
+class AdminHotelApprovalPage(APIView):
+    permission_classes = [IsAdminUser]
+    authentication_classes = (JWTAuthentication, SessionAuthentication)
+    renderer_classes = [TemplateHTMLRenderer, JSONRenderer]
+    template_name = "hotels/admin_approve.html"
+
+    def get_permissions(self):
+        if getattr(self.request, "method", "").upper() == "POST":
+            return [IsAuthenticated(), IsAdminOrHotelPartner()]
+        return [IsAdminUser()]
+
+    def get(self, request):
+        pending_qs = (
+            Hotel.objects.select_related("account__user")
+            .filter(is_active=False, approval_requested=True)
+            .order_by("-created_at")
+        )
+
+        if getattr(getattr(request, "accepted_renderer", None), "format", None) == "json":
+            serializer = HotelApprovalSerializer(pending_qs, many=True)
+            return Response(serializer.data)
+
+        pending_hotels = []
+        for hotel in pending_qs:
+            token = hotel_approval_signer.sign(str(hotel.id))
+            approve_path = reverse("hotel-partner-approve", kwargs={"token": token})
+            reject_path = reverse("hotel-partner-reject", kwargs={"token": token})
+
+            owner_email = None
+            account = getattr(hotel, "account", None)
+            if account and getattr(account, "user", None):
+                owner_email = getattr(account.user, "email", None)
+
+            pending_hotels.append(
+                {
+                    "id": hotel.id,
+                    "name": hotel.name,
+                    "country": hotel.country,
+                    "city": hotel.city,
+                    "owner_email": owner_email or "",
+                    "approve_url": request.build_absolute_uri(approve_path),
+                    "reject_url": request.build_absolute_uri(reject_path),
+                }
+            )
+
+        context = {"pending_hotels": pending_hotels}
+        return Response(context)
+
+    def post(self, request):
+        user = getattr(request, "user", None)
+        if user and getattr(user, "is_staff", False):
+            raise ValidationError({"detail": "Admin approval is handled via the signed approve/reject links."})
+
+        hotel_id = get_user_hotel_id(user)
+        if not hotel_id:
+            raise PermissionDenied("You do not have permission to request hotel approval")
+
+        try:
+            hotel = Hotel.objects.get(pk=hotel_id)
+        except Hotel.DoesNotExist:
+            return Response({"detail": "Hotel not found."}, status=404)
+
+        if hotel.is_active:
+            raise ValidationError(
+                {"detail": "This hotel is already active (approved). No approval request is needed."}
+            )
+
+        missing = _get_hotel_missing_sections(hotel)
+        if missing:
+            raise ValidationError(
+                {
+                    "detail": "Complete all sections before requesting approval.",
+                    "missing": missing,
+                }
+            )
+
+        if not getattr(hotel, "approval_requested", False):
+            hotel.approval_requested = True
+            hotel.save(update_fields=["approval_requested"])
+            _send_hotel_approval_email(request, hotel)
+
+        return Response({"detail": "Approval request submitted."}, status=200)
 
 
 def hotel_partner_admin_approval_page(request):
