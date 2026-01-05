@@ -9,6 +9,7 @@ from .views import (
     HotelImageViewSet,
     HotelPolicyViewSet,
     HotelViewSet,
+    PartnerRequestViewSet,
     ReservationViewSet,
     ReviewViewSet,
     RoomImageViewSet,
@@ -37,6 +38,7 @@ router.register(r"facilities", HotelFacilityViewSet, basename="facility")
 router.register(r"facility-mappings", HotelFacilityMappingViewSet, basename="facilitymapping")
 router.register(r"media-library", MediaLibraryViewSet, basename="medialibrary")
 router.register(r"hotel-partner-approvals", HotelPartnerApprovalListView, basename="hotel-partner-approval")
+router.register(r"partner-requests", PartnerRequestViewSet, basename="partner-request")
 
 urlpatterns = router.urls + [
     path(

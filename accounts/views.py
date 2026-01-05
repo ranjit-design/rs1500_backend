@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from rest_framework.views import APIView
 from django.core.mail import send_mail
 from .models import EmailOTP
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from .serializers import (
     UserSerializer,
     RequestOTPSerializer,
@@ -17,6 +17,28 @@ from django.conf import settings
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 import secrets
+
+
+class MeView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        user = getattr(request, "user", None)
+        name = (f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}").strip()
+        if not name:
+            name = (getattr(user, "username", "") or "").strip()
+        if not name:
+            name = (getattr(user, "email", "") or "").strip()
+        return Response(
+            {
+                "user": UserSerializer(user).data,
+                "is_hotel_account": bool(user and hasattr(user, "hotel_account")),
+                "email": getattr(user, "email", None),
+                "name": name,
+                "role": "partner" if (user and hasattr(user, "hotel_account")) else "user",
+            },
+            status=200,
+        )
 
 
 class GoogleLoginView(APIView):
@@ -63,11 +85,19 @@ class GoogleLoginView(APIView):
 
         refresh = RefreshToken.for_user(user)
         user_serializer = UserSerializer(user)
+        name = (f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}").strip()
+        if not name:
+            name = (getattr(user, "username", "") or "").strip()
+        if not name:
+            name = (getattr(user, "email", "") or "").strip()
         return Response(
             {
                 "user": user_serializer.data,
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
+                "email": getattr(user, "email", None),
+                "name": name,
+                "role": "partner" if hasattr(user, "hotel_account") else "user",
             },
             status=200,
         )
@@ -154,10 +184,19 @@ class VerifyRegisterOTPView(APIView):
             user.save()
 
             refresh = RefreshToken.for_user(user)
+            name = (f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}").strip()
+            if not name:
+                name = (getattr(user, "username", "") or "").strip()
+            if not name:
+                name = (getattr(user, "email", "") or "").strip()
             return Response({
                 "detail":"OTP verified. Account activated.",
+                "user": UserSerializer(user).data,
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
+                "email": getattr(user, "email", None),
+                "name": name,
+                "role": "partner" if hasattr(user, "hotel_account") else "user",
             }, status=200)
         else:
             record.attempts += 1

@@ -18,7 +18,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import EmailOTP, HotelAccount
-from accounts.serializers import RequestOTPSerializer, VerifyOTPSerializer
+from accounts.serializers import RequestOTPSerializer, VerifyOTPSerializer, UserSerializer
 from accounts.utils import create_otp_record, hash_otp
 
 from .models import (
@@ -29,6 +29,7 @@ from .models import (
     HotelFacilityMapping,
     HotelImage,
     HotelPolicy,
+    PartnerRequest,
     Reservation,
     Review,
     RoomImage,
@@ -54,6 +55,7 @@ from .serializers import (
     MediaLibraryItemSerializer,
     HotelClaimSerializer,
     HotelApprovalSerializer,
+    PartnerRequestSerializer,
 )
 
 import secrets
@@ -242,6 +244,9 @@ class HotelViewSet(viewsets.ModelViewSet):
             return HotelDetailSerializer
         return HotelSerializer
 
+    def perform_create(self, serializer):
+        serializer.save(is_active=False)
+
     @action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
     def claim(self, request):
         """Allow an authenticated user to claim their hotel and get its data.
@@ -330,8 +335,15 @@ class HotelViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         obj = self.get_object()
         user = getattr(self.request, "user", None)
+
         if user and user.is_staff:
-            serializer.save()
+            if "is_active" in serializer.validated_data and serializer.validated_data.get("is_active") != obj.is_active:
+                raise ValidationError(
+                    {
+                        "is_active": "Hotel activation must be done via the admin approval endpoint.",
+                    }
+                )
+            serializer.save(is_active=obj.is_active)
             return
 
         hotel_id = get_user_hotel_id(user)
@@ -403,6 +415,11 @@ class RoomTypeViewSet(viewsets.ModelViewSet):
         user = getattr(self.request, "user", None)
         if user and user.is_staff:
             return qs.prefetch_related("room_images")
+
+        user_hotel_id = get_user_hotel_id(user)
+        if user_hotel_id and (not hotel_id or str(hotel_id) == str(user_hotel_id)):
+            return qs.filter(hotel_id=user_hotel_id).prefetch_related("room_images")
+
         return qs.filter(is_active=True, hotel__is_active=True).prefetch_related("room_images")
 
     def get_serializer_class(self):
@@ -472,6 +489,11 @@ class HotelImageViewSet(viewsets.ModelViewSet):
         user = getattr(self.request, "user", None)
         if user and user.is_staff:
             return qs
+
+        user_hotel_id = get_user_hotel_id(user)
+        if user_hotel_id and (not hotel_id or str(hotel_id) == str(user_hotel_id)):
+            return qs.filter(hotel_id=user_hotel_id)
+
         return qs.filter(hotel__is_active=True)
 
     def get_serializer_class(self):
@@ -623,6 +645,11 @@ class RoomImageViewSet(viewsets.ModelViewSet):
         user = getattr(self.request, "user", None)
         if user and user.is_staff:
             return qs
+
+        user_hotel_id = get_user_hotel_id(user)
+        if user_hotel_id:
+            return qs.filter(room_type__hotel_id=user_hotel_id)
+
         return qs.filter(room_type__is_active=True, room_type__hotel__is_active=True)
 
     def perform_create(self, serializer):
@@ -688,6 +715,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
         user = getattr(self.request, "user", None)
         if user and user.is_staff:
             return qs
+
+        user_hotel_id = get_user_hotel_id(user)
+        if user_hotel_id and (not hotel_id or str(hotel_id) == str(user_hotel_id)):
+            return qs.filter(hotel_id=user_hotel_id)
+
         return qs.filter(hotel__is_active=True)
 
     def perform_create(self, serializer):
@@ -720,6 +752,11 @@ class HotelPolicyViewSet(viewsets.ModelViewSet):
         user = getattr(self.request, "user", None)
         if user and user.is_staff:
             return qs
+
+        user_hotel_id = get_user_hotel_id(user)
+        if user_hotel_id and (not hotel_id or str(hotel_id) == str(user_hotel_id)):
+            return qs.filter(hotel_id=user_hotel_id)
+
         return qs.filter(hotel__is_active=True)
 
     def perform_create(self, serializer):
@@ -768,6 +805,16 @@ class HotelPolicyViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
+class PartnerRequestViewSet(viewsets.ModelViewSet):
+    queryset = PartnerRequest.objects.all().order_by("-created_at")
+    serializer_class = PartnerRequestSerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [AllowAny()]
+        return [IsAdminUser()]
+
+
 class HotelFacilityViewSet(viewsets.ModelViewSet):
     queryset = HotelFacility.objects.all().order_by("name")
     serializer_class = HotelFacilitySerializer
@@ -791,6 +838,11 @@ class HotelFacilityMappingViewSet(viewsets.ModelViewSet):
         user = getattr(self.request, "user", None)
         if user and user.is_staff:
             return qs
+
+        user_hotel_id = get_user_hotel_id(user)
+        if user_hotel_id and (not hotel_id or str(hotel_id) == str(user_hotel_id)):
+            return qs.filter(hotel_id=user_hotel_id)
+
         return qs.filter(hotel__is_active=True)
 
     def perform_create(self, serializer):
@@ -933,6 +985,11 @@ class HotelPartnerRegisterView(viewsets.ViewSet):
 
         login(request, user)
         refresh = RefreshToken.for_user(user)
+        name = (f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}").strip()
+        if not name:
+            name = (getattr(user, "username", "") or "").strip()
+        if not name:
+            name = (getattr(user, "email", "") or "").strip()
 
         return Response(
             {
@@ -941,6 +998,10 @@ class HotelPartnerRegisterView(viewsets.ViewSet):
                 "redirect_url": "/hotel-admin/",
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
+                "user": UserSerializer(user).data,
+                "email": getattr(user, "email", None),
+                "name": name,
+                "role": "partner",
             },
             status=201,
         )
@@ -999,6 +1060,11 @@ class HotelPartnerVerifyOTPView(viewsets.ViewSet):
 
             login(request, user)
             refresh = RefreshToken.for_user(user)
+            name = (f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}").strip()
+            if not name:
+                name = (getattr(user, "username", "") or "").strip()
+            if not name:
+                name = (getattr(user, "email", "") or "").strip()
 
             return Response(
                 {
@@ -1007,6 +1073,10 @@ class HotelPartnerVerifyOTPView(viewsets.ViewSet):
                     "redirect_url": "/hotel-admin/",
                     "refresh": str(refresh),
                     "access": str(refresh.access_token),
+                    "user": UserSerializer(user).data,
+                    "email": getattr(user, "email", None),
+                    "name": name,
+                    "role": "partner",
                 },
                 status=200,
             )
@@ -1023,6 +1093,9 @@ def hotel_partner_approve_view(request, token):
     for the hotel ID. When opened, the hotel is marked as active so it becomes
     visible on the public frontend.
     """
+
+    if not (getattr(request.user, "is_authenticated", False) and request.user.is_staff):
+        return HttpResponse("Access denied: admin only.", status=403)
 
     try:
         hotel_id = hotel_approval_signer.unsign(token, max_age=7 * 24 * 60 * 60)
@@ -1087,6 +1160,9 @@ def hotel_partner_reject_view(request, token):
     The link is sent to the platform owner by email and contains a signed token
     for the hotel ID.
     """
+
+    if not (getattr(request.user, "is_authenticated", False) and request.user.is_staff):
+        return HttpResponse("Access denied: admin only.", status=403)
 
     try:
         hotel_id = hotel_approval_signer.unsign(token, max_age=7 * 24 * 60 * 60)

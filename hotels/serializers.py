@@ -11,6 +11,7 @@ from .models import (
     HotelFacilityMapping,
     HotelImage,
     HotelPolicy,
+    PartnerRequest,
     Reservation,
     Review,
     RoomImage,
@@ -433,21 +434,51 @@ class HotelDetailSerializer(serializers.ModelSerializer):
 class ReservationSerializer(serializers.ModelSerializer):
     """Serializer for reservation form data from frontend"""
     hotel_name = serializers.CharField(source='hotel.name', read_only=True)
+    hotel_city = serializers.CharField(source="hotel.city", read_only=True)
+    hotel_country = serializers.CharField(source="hotel.country", read_only=True)
+    hotel_address = serializers.CharField(source="hotel.address", read_only=True)
     room_type_name = serializers.CharField(source='room_type.name', read_only=True)
+    nights = serializers.SerializerMethodField(read_only=True)
+    booking_id = serializers.IntegerField(source="id", read_only=True)
+    status_label = serializers.SerializerMethodField(read_only=True)
+
+    def get_nights(self, obj):
+        check_in = getattr(obj, "check_in", None)
+        check_out = getattr(obj, "check_out", None)
+        if not check_in or not check_out:
+            return None
+        try:
+            return max((check_out - check_in).days, 0)
+        except Exception:
+            return None
+
+    def get_status_label(self, obj):
+        status = getattr(obj, "status", None)
+        if status == Reservation.Status.CONFIRMED:
+            return "Approved"
+        if status == Reservation.Status.CANCELLED:
+            return "Cancelled"
+        return "Pending"
 
     class Meta:
         model = Reservation
         fields = [
+            "booking_id",
             "id",
             "hotel",
             "hotel_name",
+            "hotel_city",
+            "hotel_country",
+            "hotel_address",
             "room_type",
             "room_type_name",
             "guest_name",
             "guest_email",
             "guest_phone",
+            "guest_address",
             "check_in",
             "check_out",
+            "nights",
             "adults",
             "children",
             "rooms_count",
@@ -455,6 +486,7 @@ class ReservationSerializer(serializers.ModelSerializer):
             "currency",
             "special_requests",
             "status",
+            "status_label",
             "created_at",
             "whatsapp_message_sent",
         ]
@@ -521,4 +553,22 @@ class HotelApprovalSerializer(serializers.ModelSerializer):
             "created_at",
             "owner_email",
         ]
+
+
+class PartnerRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PartnerRequest
+        fields = [
+            "id",
+            "full_name",
+            "email",
+            "phone",
+            "hotel_name",
+            "country",
+            "city",
+            "message",
+            "status",
+            "created_at",
+        ]
+        read_only_fields = ["id", "status", "created_at"]
 

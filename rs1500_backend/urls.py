@@ -21,6 +21,7 @@ from django.urls import include, path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from accounts.views import (
     GoogleLoginView,
+    MeView,
     RequestRegisterView,
     VerifyRegisterOTPView,
     EmailOrUsernameTokenObtainPairView,
@@ -32,6 +33,7 @@ urlpatterns = [
     path('hotel-admin/', hotel_partner_admin_site.urls),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/token/', EmailOrUsernameTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/auth/me/', MeView.as_view(), name='auth-me'),
     path('api/auth/request-otp/', RequestRegisterView.as_view(), name='request-otp'),
     path('api/auth/verify-otp/', VerifyRegisterOTPView.as_view(), name='verify-otp'),
     path('api/auth/google/', GoogleLoginView.as_view(), name='google-login'),

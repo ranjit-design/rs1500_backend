@@ -52,7 +52,7 @@ class Hotel(models.Model):
     )
 
     rating = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     approval_requested = models.BooleanField(default=False)
 
     amenities = models.ManyToManyField(Amenity, blank=True, related_name="hotels")
@@ -249,6 +249,7 @@ class Reservation(models.Model):
     guest_name = models.CharField(max_length=100)
     guest_email = models.EmailField()
     guest_phone = models.CharField(max_length=20)
+    guest_address = models.CharField(max_length=255, blank=True)
     
     # Booking details
     check_in = models.DateField()
@@ -285,3 +286,28 @@ class Reservation(models.Model):
         default=Status.PENDING,
         help_text="Reservation status: pending, confirmed, or cancelled.",
     )
+
+
+class PartnerRequest(models.Model):
+    class Status(models.TextChoices):
+        NEW = "new", "New"
+        CONTACTED = "contacted", "Contacted"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    full_name = models.CharField(max_length=120)
+    email = models.EmailField(db_index=True)
+    phone = models.CharField(max_length=30, blank=True)
+    hotel_name = models.CharField(max_length=200)
+    country = models.CharField(max_length=80, blank=True)
+    city = models.CharField(max_length=80, blank=True)
+    message = models.TextField(blank=True)
+
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"PartnerRequest({self.email} - {self.hotel_name})"

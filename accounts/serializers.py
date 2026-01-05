@@ -6,7 +6,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id','email']
+        fields = ["id", "email", "username", "first_name", "last_name"]
 
 
 class RequestOTPSerializer(serializers.Serializer):
@@ -42,4 +42,19 @@ class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
             else:
                 attrs[self.username_field] = user.get_username()
 
-        return super().validate(attrs)
+        data = super().validate(attrs)
+
+        user = getattr(self, "user", None)
+        data["user"] = UserSerializer(user).data
+
+        name = (f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}").strip()
+        if not name:
+            name = (getattr(user, "username", "") or "").strip()
+        if not name:
+            name = (getattr(user, "email", "") or "").strip()
+
+        data["email"] = getattr(user, "email", None)
+        data["name"] = name
+        data["role"] = "partner" if (user and hasattr(user, "hotel_account")) else "user"
+
+        return data
