@@ -80,6 +80,10 @@ REST_FRAMEWORK = {
     )
 }
 
+SIMPLE_JWT = {
+    "AUTH_HEADER_TYPES": ("Bearer", "JWT"),
+}
+
 ROOT_URLCONF = 'rs1500_backend.urls'
 
 TEMPLATES = [

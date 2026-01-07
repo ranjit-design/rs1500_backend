@@ -373,6 +373,9 @@ class HotelViewSet(viewsets.ModelViewSet):
         payload_serializer = HotelClaimSerializer(data=request.data)
         payload_serializer.is_valid(raise_exception=True)
 
+        if request.method.lower() == "post":
+            return self.create(request)
+
         user = getattr(request, "user", None)
         hotel_id = get_user_hotel_id(user)
         if not hotel_id:
@@ -386,13 +389,16 @@ class HotelViewSet(viewsets.ModelViewSet):
         serializer = HotelDetailSerializer(hotel, context={"request": request})
         return Response(serializer.data)
 
-    @action(detail=False, methods=["get", "patch"], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=["get", "patch", "post"], permission_classes=[IsAuthenticated])
     def me(self, request):
         """Return the Hotel record linked to the authenticated hotel account.
 
         Used by the frontend partner portal so a hotel user can fetch and edit
         only their own hotel's data.
         """
+        if request.method.lower() == "post":
+            return self.create(request)
+
         user = getattr(request, "user", None)
         hotel_id = get_user_hotel_id(user)
         if not hotel_id:
