@@ -178,8 +178,13 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "hotel_media"
 
 CORS_ALLOW_ALL_ORIGINS = os.environ.get("CORS_ALLOW_ALL_ORIGINS", "True").lower() in {"1", "true", "yes", "on"}
+if not CORS_ALLOW_ALL_ORIGINS:
+    CORS_ALLOWED_ORIGINS = os.environ.get(
+        "CORS_ALLOWED_ORIGINS",
+        "https://1500rs-frontend123.vercel.app"
+    ).split(",")
 
-_csrf_trusted_origins_env = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "")
+_csrf_trusted_origins_env = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "https://1500rs-frontend123.vercel.app")
 if _csrf_trusted_origins_env.strip():
     CSRF_TRUSTED_ORIGINS = [
         o.strip() for o in _csrf_trusted_origins_env.split(",") if o.strip()
