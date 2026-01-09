@@ -110,8 +110,18 @@
                     <td>{{ hotel.owner_email }}</td>
                     <td>
                         <div class="actions">
-                            <a class="btn btn-approve" href="{{ hotel.approve_url }}">Approve</a>
-                            <a class="btn btn-reject" href="{{ hotel.reject_url }}">Reject</a>
+                            <form method="post" action="/api/admin/approve-hotels/" style="margin:0;">
+                                {% csrf_token %}
+                                <input type="hidden" name="hotel_id" value="{{ hotel.id }}" />
+                                <input type="hidden" name="action" value="approve" />
+                                <button class="btn btn-approve" type="submit">Approve</button>
+                            </form>
+                            <form method="post" action="/api/admin/approve-hotels/" style="margin:0;">
+                                {% csrf_token %}
+                                <input type="hidden" name="hotel_id" value="{{ hotel.id }}" />
+                                <input type="hidden" name="action" value="reject" />
+                                <button class="btn btn-reject" type="submit">Reject</button>
+                            </form>
                         </div>
                     </td>
                 </tr>

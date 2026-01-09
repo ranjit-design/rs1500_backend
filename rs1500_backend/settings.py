@@ -106,8 +106,12 @@ WSGI_APPLICATION = 'rs1500_backend.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+testing ="false"
+if testing =="false":
+    _database_url ="postgresql://rs1500_user:HuaFqw5KMwRrr3iGA4cHYLlRpJFg1NfG@dpg-d5f70hchg0os73804lig-a.oregon-postgres.render.com/rs1500"
+else:
+    _database_url= "postgresql://rs1500user:hotel@127.0.0.1:5432/rs1500"
 
-_database_url = os.environ.get("DATABASE_URL")
 if _database_url:
     _db_is_postgres = _database_url.startswith(("postgres://", "postgresql://"))
     _ssl_require_env = os.environ.get("DATABASE_SSL_REQUIRE")
@@ -134,7 +138,6 @@ else:
             "PORT": "5432",
         }
     }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators

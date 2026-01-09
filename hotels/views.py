@@ -616,15 +616,15 @@ class HotelImageViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        hotel_id = self.request.query_params.get("hotel")
-        if hotel_id:
-            qs = qs.filter(hotel_id=hotel_id)
         user = getattr(self.request, "user", None)
         if user and user.is_staff:
+            hotel_id = self.request.query_params.get("hotel")
+            if hotel_id:
+                qs = qs.filter(hotel_id=hotel_id)
             return qs
 
         user_hotel_id = get_user_hotel_id(user)
-        if user_hotel_id and (not hotel_id or str(hotel_id) == str(user_hotel_id)):
+        if user_hotel_id:
             return qs.filter(hotel_id=user_hotel_id)
 
         return qs.filter(hotel__is_active=True)
@@ -633,6 +633,15 @@ class HotelImageViewSet(viewsets.ModelViewSet):
         if self.action in {"create", "update", "partial_update"}:
             return HotelImageWriteSerializer
         return HotelImageSerializer
+
+    def get_object(self):
+        user = getattr(self.request, "user", None)
+        if self.action in {"update", "partial_update", "destroy"} and user and user.is_authenticated:
+            queryset = HotelImage.objects.select_related("hotel").all()
+            lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+            lookup_value = self.kwargs.get(lookup_url_kwarg)
+            return get_object_or_404(queryset, **{self.lookup_field: lookup_value})
+        return super().get_object()
 
     def create(self, request, *args, **kwargs):
         user = getattr(request, "user", None)
@@ -665,13 +674,17 @@ class HotelImageViewSet(viewsets.ModelViewSet):
         if not hotel or hotel.id != hotel_id:
             raise PermissionDenied("You can only add images for your own hotel")
 
-        serializer.save()
+        instance = serializer.save()
+        if getattr(instance, "is_cover", False):
+            HotelImage.objects.filter(hotel_id=instance.hotel_id).exclude(id=instance.id).update(is_cover=False)
 
     def perform_update(self, serializer):
         obj = self.get_object()
         user = getattr(self.request, "user", None)
         if user and user.is_staff:
-            serializer.save()
+            instance = serializer.save()
+            if getattr(instance, "is_cover", False):
+                HotelImage.objects.filter(hotel_id=instance.hotel_id).exclude(id=instance.id).update(is_cover=False)
             return
 
         hotel_id = get_user_hotel_id(user)
@@ -682,7 +695,30 @@ class HotelImageViewSet(viewsets.ModelViewSet):
         if hotel.id != hotel_id:
             raise PermissionDenied("You can only assign images to your own hotel")
 
-        serializer.save()
+        instance = serializer.save()
+        if getattr(instance, "is_cover", False):
+            HotelImage.objects.filter(hotel_id=instance.hotel_id).exclude(id=instance.id).update(is_cover=False)
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete", permission_classes=[IsAuthenticated])
+    def bulk_delete(self, request):
+        user = getattr(request, "user", None)
+        ids = request.data.get("ids")
+
+        if not isinstance(ids, list) or not ids:
+            return Response({"detail": "'ids' must be a non-empty list."}, status=400)
+
+        qs = HotelImage.objects.filter(id__in=ids)
+
+        if not (user and user.is_staff):
+            hotel_id = get_user_hotel_id(user)
+            if not hotel_id:
+                raise PermissionDenied("You do not have permission to delete hotel images")
+            qs = qs.filter(hotel_id=hotel_id)
+
+        deleted_count = qs.count()
+        qs.delete()
+
+        return Response({"deleted": deleted_count}, status=200)
 
     def perform_destroy(self, instance):
         user = getattr(self.request, "user", None)
@@ -757,6 +793,49 @@ class MediaLibraryViewSet(viewsets.ViewSet):
         image = HotelImage.objects.create(hotel=hotel, image_url=absolute_url)
 
         return Response({"id": image.id, "image_url": image.image_url}, status=201)
+
+    @action(detail=False, methods=["post"], url_path="delete", permission_classes=[IsAuthenticated])
+    def delete(self, request):
+        user = getattr(request, "user", None)
+        image_id = request.data.get("id")
+
+        if not image_id:
+            return Response({"detail": "'id' is required."}, status=400)
+
+        qs = HotelImage.objects.filter(id=image_id)
+
+        if not (user and user.is_staff):
+            hotel_id = get_user_hotel_id(user)
+            if not hotel_id:
+                raise PermissionDenied("You do not have permission to delete hotel images")
+            qs = qs.filter(hotel_id=hotel_id)
+
+        deleted, _ = qs.delete()
+        if deleted == 0:
+            return Response({"detail": "Hotel image not found."}, status=404)
+
+        return Response({"deleted": deleted}, status=200)
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete", permission_classes=[IsAuthenticated])
+    def bulk_delete(self, request):
+        user = getattr(request, "user", None)
+        ids = request.data.get("ids")
+
+        if not isinstance(ids, list) or not ids:
+            return Response({"detail": "'ids' must be a non-empty list."}, status=400)
+
+        qs = HotelImage.objects.filter(id__in=ids)
+
+        if not (user and user.is_staff):
+            hotel_id = get_user_hotel_id(user)
+            if not hotel_id:
+                raise PermissionDenied("You do not have permission to delete hotel images")
+            qs = qs.filter(hotel_id=hotel_id)
+
+        deleted_count = qs.count()
+        qs.delete()
+
+        return Response({"deleted": deleted_count}, status=200)
 
 
 class BookingViewSet(viewsets.ModelViewSet):
@@ -1421,7 +1500,42 @@ class AdminHotelApprovalPage(APIView):
     def post(self, request):
         user = getattr(request, "user", None)
         if user and getattr(user, "is_staff", False):
-            raise ValidationError({"detail": "Admin approval is handled via the signed approve/reject links."})
+            hotel_id = request.data.get("hotel_id")
+            action = (request.data.get("action") or "").strip().lower()
+
+            if not hotel_id:
+                raise ValidationError({"hotel_id": "This field is required."})
+            if action not in {"approve", "reject"}:
+                raise ValidationError({"action": "Invalid action. Use 'approve' or 'reject'."})
+
+            try:
+                hotel_id_int = int(hotel_id)
+            except (TypeError, ValueError):
+                raise ValidationError({"hotel_id": "A valid integer is required."})
+
+            try:
+                hotel = Hotel.objects.get(pk=hotel_id_int)
+            except Hotel.DoesNotExist:
+                return Response({"detail": "Hotel not found."}, status=404)
+
+            if action == "approve":
+                if not getattr(hotel, "approval_requested", False):
+                    raise ValidationError({"detail": "This hotel has not requested approval yet."})
+                if hotel.is_active:
+                    raise ValidationError({"detail": "Hotel is already approved and visible on the platform."})
+
+                hotel.is_active = True
+                hotel.save(update_fields=["is_active"])
+                return Response({"detail": "Hotel has been approved and is now visible on the platform."}, status=200)
+
+            if not getattr(hotel, "approval_requested", False):
+                raise ValidationError({"detail": "This hotel has not requested approval yet."})
+            if hotel.is_active:
+                raise ValidationError({"detail": "Hotel is already approved and visible on the platform."})
+
+            hotel.approval_requested = False
+            hotel.save(update_fields=["approval_requested"])
+            return Response({"detail": "Hotel approval request has been rejected."}, status=200)
 
         hotel_id = get_user_hotel_id(user)
         if not hotel_id:
